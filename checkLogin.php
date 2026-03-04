@@ -1,0 +1,66 @@
+<?php
+    //faccio partire la sessione
+    if(!isset($_SESSION))
+        session_start();    
+
+    if($_POST["azione"]==="signup"){
+        header("Location: signUP.php");
+    }
+
+    require_once 'conn.php';
+
+    $username = trim($_POST["nomeUtente"] ?? '');
+    $user_password = trim($_POST["password"] ?? '');
+    $user_mail = trim($_POST["email"] ?? ''); 
+    
+    //controllo se la mai è valida(struttura corretta)
+    if (!filter_var($user_mail, FILTER_VALIDATE_EMAIL)) {
+        header("Location: login.php?error=email_non_valida");
+        exit;
+    }
+
+    if ($username === '' || $user_password === '' || $user_mail === '') {  
+        header("Location: login.php?error=dati_mancanti");
+        exit;
+    }
+
+
+    $conn = new mysqli($host, $user, $db_password, $database); 
+
+    if ($conn->connect_error) {
+        die("Connessione fallita: " . $conn->connect_error);
+    }
+
+    $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows === 1) {
+        $row = $result->fetch_assoc();
+        $hash = $row['password'];
+        //error_log($hash);
+        // Verifica password con hash
+        if (password_verify($user_password, $hash)) {  
+            // Login riuscito, salvo info nella sessione
+            $_SESSION['id'] = $row['id'];
+            $_SESSION['username'] = $username;
+            $_SESSION['loggato'] = true;
+
+            // Redirect alla home
+            header("Location: index.php");
+            exit;
+        } else {
+            // Password sbagliata
+            header("Location: login.php?error=password_errata");
+            exit;
+        }
+    } else {
+        // Utente non trovato
+        header("Location: login.php?error=utente_non_trovato");
+        exit;
+    }
+
+    // Chiudo la connessione
+    $conn->close();
+?>
