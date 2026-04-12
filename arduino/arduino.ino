@@ -1,53 +1,96 @@
 #include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280.h>
+#include "DHT.h"
 
-Adafruit_BME280 bme; // rappresentante virtuale del sensore BME280
-const int soilPin = A0;    // Sensore Umidità Suolo analogico
-const int relayPin = 7;    // Modulo Relay per la Pompa
+const int dhtPin = 2;
+const int soilPin = A0; // Sensore Umidità Suolo analogico
+const int relayPin = 7; // Modulo Relay per la Pompa
 const int bh1750Addr = 0x23; // Indirizzo I2C per GY-302
+
+DHT dht(dhtPin, DHT11);
+
+unsigned long ultimaLettura = 0;
+const long intervalloLettura = 5000; 
+
+unsigned long inizioPompa = 0;
+const long durataPompa = 3000; 
+bool pompaAttiva = false;
+
+String comandoRicevuto = "";
 
 void setup() {
   Serial.begin(9600);
-  pinMode(relayPin, OUTPUT);
+  
+  
+  pinMode(relayPin, OUTPUT); //iniziializzazione reley
   digitalWrite(relayPin, HIGH); 
 
-  if (!bme.begin(0x76)) {
-    Serial.println("Errore BME280!");
-  }
   
+  dht.begin(); //Inizializza sensori
   Wire.begin();
+
+  Wire.beginTransmission(bh1750Addr); // qua svegliamo il sensore della luce perche di default e' in modalita standby
+  Wire.write(0x10); 
+  Wire.endTransmission();
 }
 
 void loop() {
-  // Lettura BME280
-  float temperatura = bme.readTemperature();
-  float umidita = bme.readHumidity();
-  float pressione = bme.readPressure() / 100.0F; //trasformazione da Pa -> hPa
+  unsigned long ora = millis();
 
-  // Lettura Umidità Suolo (Capacitivo)
-  int soilVal = analogRead(soilPin);
+  
+  if (pompaAttiva && (ora - inizioPompa >= durataPompa)) { //spegnimento pompa
+    pompaAttiva = false;
+    digitalWrite(relayPin, HIGH); 
+  }
 
-  // Lettura Luce (GY-302) semplice
-  int lux = readBH1750();
+  
+  while (Serial.available() > 0) { //acolto comandi del file python
+    char c = (char)Serial.read();
+    if (c == '\n') {
+      comandoRicevuto.trim();
+      
+      if (comandoRicevuto == "WATER") {
+        pompaAttiva = true;
+        inizioPompa = millis();
+        digitalWrite(relayPin, LOW); // Accende il relè
+      }
+      comandoRicevuto = ""; 
+    } else if (c != '\r') {
+      comandoRicevuto += c;
+    }
+  }
 
-  // Invio dati formattati per il ponte Python
-  // Formato: temp|hum|pres|soil|lux
-  Serial.print(temperatura); Serial.print("|");
-  Serial.print(umidita);  Serial.print("|");
-  Serial.print(pressione); Serial.print("|");
-  Serial.print(soilVal); Serial.print("|");
-  Serial.println(lux);
+  
+  if (ora - ultimaLettura >= intervalloLettura) { // invio dati delle misurazioini
+    ultimaLettura = ora;
+    
+    float temperatura = dht.readTemperature();
+    float umidita = dht.readHumidity();
 
-  delay(5000); 
+    if (isnan(temperatura)) temperatura = 0.0;
+    if (isnan(umidita)) umidita = 0.0;
+
+    float pressione = 0.0; // Spazio vuoto
+
+    int rawSoil = analogRead(soilPin);
+    int soilPct = map(rawSoil, 520, 260, 0, 100);
+    soilPct = constrain(soilPct, 0, 100);
+
+    int lux = readBH1750();
+
+    Serial.print(temperatura); Serial.print("|");
+    Serial.print(umidita);     Serial.print("|");
+    Serial.print(pressione);   Serial.print("|");
+    Serial.print(soilPct);     Serial.print("|");
+    Serial.println(lux);
+  }
 }
 
 int readBH1750() {
   int val = 0;
-  Wire.beginTransmission(bh1750Addr);//"Bussa" alla porta del sensore (indirizzo 0x23)
-  Wire.requestFrom(bh1750Addr, 2);//Chiede al sensore di inviargli 2 byte di dati (la misura della luce)
+  Wire.beginTransmission(bh1750Addr);
+  Wire.requestFrom(bh1750Addr, 2);
   while (Wire.available()) {
-    val = (val << 8) | Wire.read();//Prende i pezzetti di dati e li riassembla in un numero unico
+    val = (val << 8) | Wire.read();
   }
   return val;
 }

@@ -3,8 +3,8 @@ import requests
 import time
 
 ser = serial.Serial('COM3', 9600, timeout=1) 
-php_url = "http://localhost/save_data.php"
-ID_PIANTA = 1 # L'ID della pianta
+php_url = "http://localhost/PlantCare/save_data.php" 
+ID_PIANTA = 1 
 
 while True:
     if ser.in_waiting > 0:
@@ -12,7 +12,7 @@ while True:
         if "|" in line:
             dati = line.split("|")
             
-            # Creiamo una lista di misurazioni da inviare
+            
             misurazioni = [
                 {'tipo': 'Temperatura_Aria', 'valore': dati[0]},
                 {'tipo': 'Umidita_Aria', 'valore': dati[1]},
@@ -28,7 +28,17 @@ while True:
                 }
                 try:
                     r = requests.post(php_url, data=payload)
-                    print(f"Inviato {m['tipo']}: {r.text}")
-                except:
-                    print("Errore connessione PHP")
+                    risposta = r.text
+                    print(f"Inviato {m['tipo']}: {risposta}")
+                    
+                    #se il file php ci risponde dicendo che la terra e' troppo secca viene inviato un messaggio al codice arduino che accendera la pompa
+                    if "Troppo_Secco" in risposta:
+                        print(">>> ALLARME SICCITA'! Ordino ad Arduino di accendere la pompa...")
+                        ser.write(b"WATER\n")
+                        
+                        time.sleep(5) 
+                        
+                except Exception as e:
+                    print(f"Errore connessione PHP: {e}")
+                    
         time.sleep(1)
