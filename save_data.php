@@ -1,59 +1,96 @@
 <?php
-$host = "localhost";
-$user = "root";
-$pass = "";
-$db   = "PlantCareDB";
+require_once __DIR__ . '/config/db.php';
+header('Content-Type: text/plain; charset=utf-8');
 
-$conn = new mysqli($host, $user, $pass, $db);
-if ($conn->connect_error) { die("Errore: " . $conn->connect_error); }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo 'ERRORE: Metodo non consentito.';
+    exit;
+}
 
-// RECUPERO DATI DA PontePyton.py
-$id_esemplare = $_POST['id_esemplare']; 
-$tipo         = $_POST['tipo'];
-$valore       = (float)$_POST['valore'];
+$idEsemplare = (int) ($_POST['id_esemplare'] ?? 0);
+$tipo        = trim($_POST['tipo'] ?? '');
+$valore      = $_POST['valore'] ?? null;
 
-// SALVATAGGIO DELLA RILEVAZIONE  NELLA TABELLA DEL DB
-$stmt = $conn->prepare("INSERT INTO Rilevazioni_Sensori (ID_Esemplare, Tipo_Misurazione, Valore) VALUES (?, ?, ?)");
-$stmt->bind_param("isd", $id_esemplare, $tipo, $valore);
+if ($idEsemplare <= 0 || !$tipo || $valore === null) {
+    http_response_code(400);
+    echo 'ERRORE: Parametri mancanti.';
+    exit;
+}
+
+$tipiValidi = ['Temperatura_Aria', 'Umidita_Aria', 'Umidita_Suolo', 'Luminosita', 'pH'];
+if (!in_array($tipo, $tipiValidi)) {
+    http_response_code(422);
+    echo 'ERRORE: Tipo non valido.';
+    exit;
+}
+
+$db  = getDB();
+$val = (float) $valore;
+
+$chk = $db->prepare('SELECT ID_Esemplare FROM Esemplari_Piante WHERE ID_Esemplare = ? LIMIT 1');
+$chk->bind_param('i', $idEsemplare);
+$chk->execute();
+$chk->store_result();
+if ($chk->num_rows === 0) {
+    $chk->close();
+    http_response_code(404);
+    echo 'ERRORE: Esemplare non trovato.';
+    exit;
+}
+$chk->close();
+
+$stmt = $db->prepare('INSERT INTO Rilevazioni_Sensori (ID_Esemplare, Tipo_Misurazione, Valore) VALUES (?, ?, ?)');
+$stmt->bind_param('isd', $idEsemplare, $tipo, $val);
 $stmt->execute();
 $stmt->close();
 
-// Recuperiamo le soglie ideali per questa specifica pianta per poi confrontali con quelli ricevuti dal sensore ed identificare gli stati di allarme
-$sql_soglie = "SELECT s.Temp_Ideale_Min, s.Temp_Ideale_Max, s.Umidita_Suolo_Min, s.Umidita_Suolo_Max, s.Luce_Ideale_Min 
-               FROM Esemplari_Piante e 
-               JOIN Specie_Botaniche s ON e.ID_Specie = s.ID_Specie 
-               WHERE e.ID_Esemplare = ?";
+$stmt2 = $db->prepare('SELECT s.Temp_Ideale_Min, s.Temp_Ideale_Max, s.Umidita_Suolo_Min, s.Umidita_Suolo_Max, s.Luce_Ideale_Min, s.Luce_Ideale_Max FROM Esemplari_Piante e JOIN Specie_Botaniche s ON e.ID_Specie = s.ID_Specie WHERE e.ID_Esemplare = ? LIMIT 1');
+$stmt2->bind_param('i', $idEsemplare);
+$stmt2->execute();
+$soglie = $stmt2->get_result()->fetch_assoc();
+$stmt2->close();
 
-$stmt_s = $conn->prepare($sql_soglie);
-$stmt_s->bind_param("i", $id_esemplare);
-$stmt_s->execute();
-$result = $stmt_s->get_result();
-$soglie = $result->fetch_assoc();
+if ($soglie) {
+    $tipoAllarme = null;
+    if ($tipo === 'Umidita_Suolo') {
+        if ($soglie['Umidita_Suolo_Min'] !== null && $val < $soglie['Umidita_Suolo_Min']) $tipoAllarme = 'Troppo_Secco';
+        elseif ($soglie['Umidita_Suolo_Max'] !== null && $val > $soglie['Umidita_Suolo_Max']) $tipoAllarme = 'Troppo_Umido';
+    } elseif ($tipo === 'Temperatura_Aria') {
+        if ($soglie['Temp_Ideale_Min'] !== null && $val < $soglie['Temp_Ideale_Min']) $tipoAllarme = 'Troppo_Freddo';
+        elseif ($soglie['Temp_Ideale_Max'] !== null && $val > $soglie['Temp_Ideale_Max']) $tipoAllarme = 'Troppo_Caldo';
+    } elseif ($tipo === 'Luminosita') {
+        if ($soglie['Luce_Ideale_Min'] !== null && $val < $soglie['Luce_Ideale_Min']) $tipoAllarme = 'Poca_Luce';
+    }
 
-$tipo_allarme = null;
-
-// Confronto basato sul tipo di sensore ricevuto
-if ($tipo == 'Temperatura_Aria') {
-    if ($valore < $soglie['Temp_Ideale_Min']) $tipo_allarme = 'Troppo_Freddo';
-    elseif ($valore > $soglie['Temp_Ideale_Max']) $tipo_allarme = 'Troppo_Caldo';
-} 
-elseif ($tipo == 'Umidita_Suolo') {
-    if ($valore > $soglie['Umidita_Suolo_Min']) $tipo_allarme = 'Troppo_Secco'; 
+    if ($tipoAllarme) {
+        $dup = $db->prepare('SELECT ID_Allarme FROM Eventi_Allarme WHERE ID_Esemplare = ? AND Tipo_Allarme = ? AND Data_Ora >= NOW() - INTERVAL 30 MINUTE LIMIT 1');
+        $dup->bind_param('is', $idEsemplare, $tipoAllarme);
+        $dup->execute();
+        $dup->store_result();
+        if ($dup->num_rows === 0) {
+            $dup->close();
+            $ins = $db->prepare('INSERT INTO Eventi_Allarme (ID_Esemplare, Tipo_Allarme, Valore_Rilevato) VALUES (?, ?, ?)');
+            $ins->bind_param('isd', $idEsemplare, $tipoAllarme, $val);
+            $ins->execute();
+            $ins->close();
+        } else {
+            $dup->close();
+        }
+    }
 }
-elseif ($tipo == 'Luminosita') {
-    if ($valore < $soglie['Luce_Ideale_Min']) $tipo_allarme = 'Poca_Luce';
+
+if ($tipo === 'Umidita_Suolo') {
+    $check = $db->prepare('SELECT ID_Allarme FROM Eventi_Allarme WHERE ID_Esemplare = ? AND Tipo_Allarme = "Troppo_Secco" AND Data_Ora >= NOW() - INTERVAL 5 MINUTE LIMIT 1');
+    $check->bind_param('i', $idEsemplare);
+    $check->execute();
+    $check->store_result();
+    if ($check->num_rows > 0) {
+        $check->close();
+        echo 'Troppo_Secco';
+        exit;
+    }
+    $check->close();
 }
 
-// SCRITTURA DELL'ALLARME (Se necessario)
-if ($tipo_allarme) {
-    // Controllo che si puo inserire se l'ultimo allarme per questa pianta è uguale ed è recente (< 1 ora)
-    $stmt_a = $conn->prepare("INSERT INTO Eventi_Allarme (ID_Esemplare, Tipo_Allarme, Valore_Rilevato) VALUES (?, ?, ?)");
-    $stmt_a->bind_param("isd", $id_esemplare, $tipo_allarme, $valore);
-    $stmt_a->execute();
-    $stmt_a->close();
-    echo "Allarme generato: $tipo_allarme!";
-}
-
-echo " Dati salvati correttamente.";
-$conn->close();
-?>
+echo 'OK';

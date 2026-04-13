@@ -1,82 +1,88 @@
 #include <Wire.h>
 #include "DHT.h"
 
-const int dhtPin = 2;
-const int soilPin = A0; // Sensore Umidità Suolo analogico
-const int relayPin = 7; // Modulo Relay per la Pompa
-const int bh1750Addr = 0x23; // Indirizzo I2C per GY-302
+const int   dhtPin      = 2;
+const int   soilPin     = A0;   
+const int   relayPin    = 7;    
+const byte  bh1750Addr  = 0x23; 
 
 DHT dht(dhtPin, DHT11);
 
-unsigned long ultimaLettura = 0;
-const long intervalloLettura = 5000; 
+unsigned long ultimaLettura  = 0;
+const long    intervalloLettura = 5000; 
 
 unsigned long inizioPompa = 0;
-const long durataPompa = 3000; 
-bool pompaAttiva = false;
+const long    durataPompa = 3000; 
+bool          pompaAttiva = false;
 
 String comandoRicevuto = "";
 
 void setup() {
   Serial.begin(9600);
-  
-  
-  pinMode(relayPin, OUTPUT); //iniziializzazione reley
-  digitalWrite(relayPin, HIGH); 
 
-  
-  dht.begin(); //Inizializza sensori
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+
+  dht.begin();
   Wire.begin();
 
-  Wire.beginTransmission(bh1750Addr); // qua svegliamo il sensore della luce perche di default e' in modalita standby
-  Wire.write(0x10); 
+  Wire.beginTransmission(bh1750Addr);
+  Wire.write(0x10);
   Wire.endTransmission();
+
+  delay(180); 
 }
 
 void loop() {
   unsigned long ora = millis();
 
-  
-  if (pompaAttiva && (ora - inizioPompa >= durataPompa)) { //spegnimento pompa
+ 
+  if (pompaAttiva && (ora - inizioPompa >= durataPompa)) {
     pompaAttiva = false;
-    digitalWrite(relayPin, HIGH); 
+    digitalWrite(relayPin, HIGH);
+    Serial.println("[INFO] Pompa spenta.");
   }
 
-  
-  while (Serial.available() > 0) { //acolto comandi del file python
+ 
+  while (Serial.available() > 0) {
     char c = (char)Serial.read();
     if (c == '\n') {
       comandoRicevuto.trim();
-      
       if (comandoRicevuto == "WATER") {
-        pompaAttiva = true;
-        inizioPompa = millis();
-        digitalWrite(relayPin, LOW); // Accende il relè
+        if (!pompaAttiva) {
+          pompaAttiva = true;
+          inizioPompa = millis();
+          digitalWrite(relayPin, LOW);
+          Serial.println("[INFO] Pompa accesa.");
+        }
       }
-      comandoRicevuto = ""; 
+      comandoRicevuto = "";
     } else if (c != '\r') {
       comandoRicevuto += c;
     }
   }
 
-  
-  if (ora - ultimaLettura >= intervalloLettura) { // invio dati delle misurazioini
+ 
+  if (ora - ultimaLettura >= intervalloLettura) {
     ultimaLettura = ora;
-    
+
     float temperatura = dht.readTemperature();
-    float umidita = dht.readHumidity();
+    float umidita     = dht.readHumidity();
+
 
     if (isnan(temperatura)) temperatura = 0.0;
-    if (isnan(umidita)) umidita = 0.0;
+    if (isnan(umidita))     umidita     = 0.0;
 
-    float pressione = 0.0; // Spazio vuoto
+    float pressione = 0.0; 
 
-    int rawSoil = analogRead(soilPin);
-    int soilPct = map(rawSoil, 520, 260, 0, 100);
-    soilPct = constrain(soilPct, 0, 100);
+ 
+    int rawSoil  = analogRead(soilPin);
+    int soilPct  = map(rawSoil, 520, 260, 0, 100);
+    soilPct      = constrain(soilPct, 0, 100);
 
     int lux = readBH1750();
 
+ 
     Serial.print(temperatura); Serial.print("|");
     Serial.print(umidita);     Serial.print("|");
     Serial.print(pressione);   Serial.print("|");
@@ -85,12 +91,13 @@ void loop() {
   }
 }
 
+
 int readBH1750() {
-  int val = 0;
-  Wire.beginTransmission(bh1750Addr);
-  Wire.requestFrom(bh1750Addr, 2);
-  while (Wire.available()) {
-    val = (val << 8) | Wire.read();
+  uint16_t val = 0;
+  if (Wire.requestFrom(bh1750Addr, (uint8_t)2) == 2) {
+    val = (Wire.read() << 8) | Wire.read();
+
+    val = (uint16_t)(val / 1.2);
   }
-  return val;
+  return (int)val;
 }
