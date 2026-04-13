@@ -1,0 +1,55 @@
+#authScreen {
+  position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(130,212,78,.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(90,184,216,.03) 0%, transparent 50%);
+}
+.auth-box    { width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 36px; }
+.auth-logo   { font-family: var(--font-d); font-size: 26px; color: var(--green2); text-align: center; margin-bottom: 6px; }
+.auth-sub    { font-family: var(--font-m); font-size: 9px; color: var(--text-muted); letter-spacing: 2px; text-align: center; margin-bottom: 28px; }
+.auth-tabs   { display: flex; background: var(--bg3); border-radius: 9px; padding: 4px; margin-bottom: 24px; }
+.auth-tab    { flex: 1; text-align: center; padding: 7px; border-radius: 6px; cursor: pointer; font-size: 12.5px; color: var(--text-muted); transition: all .15s; }
+.auth-tab.active { background: var(--card2); color: var(--green2); }
+.auth-err    { background: rgba(224,85,85,.1); border: 1px solid rgba(224,85,85,.25); border-radius: 8px; padding: 9px 13px; font-size: 12px; color: var(--red); margin-bottom: 14px; display: none; }
+.auth-submit { width: 100%; padding: 11px; border-radius: 9px; background: var(--green); color: #0b0e09; font-size: 13.5px; font-weight: 600; cursor: pointer; border: none; font-family: var(--font-b); transition: background .15s; margin-top: 6px; }
+.auth-submit:hover { background: var(--green2); }
+.auth-footer { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 16px; }
+.form-group  { margin-bottom: 14px; }
+.form-label  { display: block; font-family: var(--font-m); font-size: 9px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+.form-input  { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; color: var(--text); font-size: 13px; font-family: var(--font-b); outline: none; transition: border-color .15s; }
+.form-input:focus       { border-color: var(--green-dim); }
+.form-input::placeholder{ color: var(--text-muted); }
+select.form-input option{ background: var(--card); }
+.form-hint   { font-size: 10.5px; color: var(--text-muted); margin-top: 5px; }
+.form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.form-section       { margin-bottom: 20px; }
+.form-section-title { font-family: var(--font-m); font-size: 9px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.form-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.range-wrap  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.range-input { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; font-family: var(--font-b); outline: none; width: 100%; }
+.range-input:focus { border-color: var(--green-dim); }
+
+
+.steps    { display: flex; align-items: center; gap: 0; margin-bottom: 22px; }
+.step     { display: flex; align-items: center; gap: 7px; font-family: var(--font-m); font-size: 10px; color: var(--text-muted); }
+.step-num { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 10px; }
+.step.done   .step-num { background: var(--green); border-color: var(--green); color: #000; }
+.step.active .step-num { border-color: var(--green); color: var(--green); }
+.step.active { color: var(--text); }
+.step-line   { flex: 1; height: 1px; background: var(--border); margin: 0 8px; }
+.step-line.done { background: var(--green-dim); }
+
+.species-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 8px; margin-top: 8px; }
+.species-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 11px; cursor: pointer; transition: all .15s; text-align: center; }
+.species-card:hover    { border-color: var(--border2); }
+.species-card.selected { border-color: var(--green); background: var(--green-dim); }
+.species-card .se { font-size: 26px; margin-bottom: 5px; }
+.species-card .sn { font-size: 11px; font-weight: 500; color: var(--text); }
+.species-card .ss { font-size: 9px; color: var(--text-muted); font-style: italic; margin-top: 2px; }
+
+.avatar-upload { width: 80px; height: 80px; border-radius: 14px; background: var(--bg3); border: 2px dashed var(--border2); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: border-color .2s; color: var(--text-muted); flex-shrink: 0; }
+.avatar-upload:hover { border-color: var(--green-dim); }
+.avatar-upload span  { font-size: 9px; font-family: var(--font-m); margin-top: 3px; }
